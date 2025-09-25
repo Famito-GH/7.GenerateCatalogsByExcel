@@ -59,7 +59,7 @@ class App:
         self.export_to_pptx = tk.BooleanVar(value=False)
         self.var_ignore_structure = tk.BooleanVar(value=False)
         self.var_connect_catalogs = tk.BooleanVar(value=False)
-        self.var_sort_by_price = tk.BooleanVar(value=False)
+        #self.var_sort_by_price = tk.BooleanVar(value=False)
         self.var_delete_other_pages = tk.BooleanVar(value=False)
 
         self.total_errors = 0
@@ -150,12 +150,11 @@ class App:
         options_frame = ttk.LabelFrame(frame, text="Další možnosti exportu")
         options_frame.pack(fill=tk.X, pady=5)
         ttk.Checkbutton(options_frame, text="Spojit výsledné soubory", variable=self.var_connect_catalogs).pack(anchor=tk.W, padx=5, pady=(0, 5))
-        ttk.Checkbutton(options_frame, text="Seřadit produkty podle ceny", variable=self.var_sort_by_price, command=self.sort_by_price).pack(anchor=tk.W, padx=5, pady=(0, 5))
+        #ttk.Checkbutton(options_frame, text="Seřadit produkty podle ceny", variable=self.var_sort_by_price, command=self.sort_by_price).pack(anchor=tk.W, padx=5, pady=(0, 5))
         ttk.Checkbutton(options_frame, text="Odstranit úvodní stránky", variable=self.var_delete_other_pages, command=self.delete_other_pages).pack(anchor=tk.W, padx=5, pady=(0, 5))
+        ttk.Checkbutton(options_frame, text="Ignorovat strukturu formátů", variable=self.var_ignore_structure).pack(anchor=tk.W, padx=5, pady=(0, 5))
         ttk.Button(options_frame, text="Zvolit cílovou složku", command=self.select_root_folder).pack(anchor=tk.W, padx=5, pady=(5, 2))
         self.label_target_folder = ttk.Label(options_frame, text="", foreground="gray")
-        self.label_target_folder.pack(anchor=tk.W, padx=5, pady=(0, 5))
-        ttk.Checkbutton(options_frame, text="Ignorovat strukturu formátů", variable=self.var_ignore_structure).pack(anchor=tk.W, padx=5, pady=(0, 5))
 
         # 6) Plánované spuštění
         time_frame = ttk.LabelFrame(frame, text="Plánované spuštění")
@@ -196,8 +195,21 @@ class App:
         if path:
             self.save_filepath = path
 
-    def delete_other_pages(self):
-        None
+    def delete_other_pages(self, pres=None):
+        if pres is None:
+            return
+        slides_to_delete = []
+        for i in range(1, pres.Slides.Count + 1):
+            slide = pres.Slides(i)
+            for shape in slide.Shapes:
+                try:
+                    if hasattr(shape, "Name") and shape.Name == "ignore_slide":
+                        slides_to_delete.append(i)
+                        break
+                except Exception:
+                    continue
+        for idx in reversed(slides_to_delete):
+            pres.Slides(idx).Delete()
 
     def sort_by_price(self):
         None
@@ -278,7 +290,6 @@ class App:
                             except Exception as e:
                                 print(f"⚠ Nelze smazat {os.path.basename(f)}: {e}")
 
-            # --- PPTX spojování přes COM ---
             if grouped_pptxs:
                 import pythoncom, pywintypes, win32com.client
                 pythoncom.CoInitialize()
@@ -342,7 +353,11 @@ class App:
                         "selected_files": selected_files,
                         "scheduled_time": f"{self.hour_cb.get()}:{self.minute_cb.get()}",
                         "root_folder": self.root_folder,
-                        "save_filepath": self.save_filepath
+                        "save_filepath": self.save_filepath,
+                        "connect_catalogs": self.var_connect_catalogs.get(),
+                        "delete_other_pages": self.var_delete_other_pages.get(),
+                        "hour": self.hour_cb.get(),
+                        "minute": self.minute_cb.get(),
                     }
                     os.makedirs("configs", exist_ok=True)
                     path = os.path.join("configs", f"{config_name}.json")
@@ -395,6 +410,12 @@ class App:
             self.var_ignore_structure.set(config.get("ignore_structure", False))
             self.root_folder = config.get("root_folder")
             self.save_filepath = config.get("save_filepath", self.save_filepath)
+            self.var_connect_catalogs.set(config.get("connect_catalogs", False))
+            self.var_delete_other_pages.set(config.get("delete_other_pages", False))
+            if "hour" in config:
+                self.hour_cb.set(config.get("hour", "00"))
+            if "minute" in config:
+                self.minute_cb.set(config.get("minute", "00"))
 
             self.load_catalog_files()
             selected_files = config.get("selected_files", [])
@@ -553,7 +574,7 @@ class App:
             selected_indices = self.listbox.curselection()
             ppt_files = [self.listbox.get(i) for i in selected_indices]
             if not ppt_files:
-                raise ValueError("Nevybrali jste žádné PPTX soubory.")
+                raise ValueError("Nevybrali jste žádné soubory.")
 
             # Generování probíhá vždy do self.save_filepath
             export_base_dir = self.save_filepath
@@ -697,6 +718,9 @@ class App:
                             pres.SaveAs(os.path.join(pptx_dir, name + ".pptx"))
                         except pywintypes.com_error:
                             pres.SaveCopyAs(os.path.join(pptx_dir, name + ".pptx"))
+
+            if self.var_delete_other_pages.get():
+                self.delete_other_pages(pres)
             print(f"💾 Ukládám do složky: {output_dir}")
             pres.Close()
             ppt_app.Quit()
@@ -709,8 +733,4 @@ class App:
 if __name__ == "__main__":
     root = tk.Tk()
     app = App(root)
-    # Výpis prefixů do konzole
-    print("\nSeznam všech prefixů použitých v běhu programu:")
-    for p in app.prefixes:
-        print(f"{p}")
     root.mainloop()
