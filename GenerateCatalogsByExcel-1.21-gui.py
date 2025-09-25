@@ -199,44 +199,9 @@ class App:
             self.save_filepath = path
 
     def delete_other_pages(self, pres=None):
-        # Pokud není předán objekt prezentace, pokusí se najít soubory v cílové složce a upravit je
         if pres is None:
-            # Urči složku podle nastavení
-            if self.var_ignore_structure.get():
-                # Všechny PPTX v hlavní export složce nebo root_folder
-                base_dir = self.root_folder if self.root_folder else self.save_filepath
-                pptx_dir = base_dir
-            else:
-                base_dir = self.root_folder if self.root_folder else self.save_filepath
-                pptx_dir = os.path.join(base_dir, "PPTX")
-            if not os.path.isdir(pptx_dir):
-                return
-            pptx_files = [os.path.join(pptx_dir, f) for f in os.listdir(pptx_dir) if f.lower().endswith(".pptx")]
-            for pptx_path in pptx_files:
-                try:
-                    pythoncom.CoInitialize()
-                    ppt_app = win32com.client.Dispatch("PowerPoint.Application")
-                    pres = ppt_app.Presentations.Open(pptx_path, WithWindow=False)
-                    slides_to_delete = []
-                    for i in range(1, pres.Slides.Count + 1):
-                        slide = pres.Slides(i)
-                        for shape in slide.Shapes:
-                            try:
-                                if hasattr(shape, "Name") and shape.Name == "ignore_slide":
-                                    slides_to_delete.append(i)
-                                    break
-                            except Exception:
-                                continue
-                    for idx in reversed(slides_to_delete):
-                        pres.Slides(idx).Delete()
-                    pres.Save()
-                    pres.Close()
-                    ppt_app.Quit()
-                    pythoncom.CoUninitialize()
-                except Exception:
-                    continue
-            return
-        # ...původní chování pro jeden objekt prezentace...
+            return  # když není předaná prezentace, nic se nedělá
+
         slides_to_delete = []
         for i in range(1, pres.Slides.Count + 1):
             slide = pres.Slides(i)
@@ -247,8 +212,66 @@ class App:
                         break
                 except Exception:
                     continue
+
         for idx in reversed(slides_to_delete):
-            pres.Slides(idx).Delete()
+            try:
+                pres.Slides(idx).Delete()
+            except Exception:
+                continue
+
+
+
+    # def delete_other_pages(self, pres=None):
+    #     # Pokud není předán objekt prezentace, pokusí se najít soubory v cílové složce a upravit je
+    #     if pres is None:
+    #         # Urči složku podle nastavení
+    #         if self.var_ignore_structure.get():
+    #             # Všechny PPTX v hlavní export složce nebo root_folder
+    #             base_dir = self.root_folder if self.root_folder else self.save_filepath
+    #             pptx_dir = base_dir
+    #         else:
+    #             base_dir = self.root_folder if self.root_folder else self.save_filepath
+    #             pptx_dir = os.path.join(base_dir, "PPTX")
+    #         if not os.path.isdir(pptx_dir):
+    #             return
+    #         pptx_files = [os.path.join(pptx_dir, f) for f in os.listdir(pptx_dir) if f.lower().endswith(".pptx")]
+    #         for pptx_path in pptx_files:
+    #             try:
+    #                 pythoncom.CoInitialize()
+    #                 ppt_app = win32com.client.Dispatch("PowerPoint.Application")
+    #                 pres = ppt_app.Presentations.Open(pptx_path, WithWindow=False)
+    #                 slides_to_delete = []
+    #                 for i in range(1, pres.Slides.Count + 1):
+    #                     slide = pres.Slides(i)
+    #                     for shape in slide.Shapes:
+    #                         try:
+    #                             if hasattr(shape, "Name") and shape.Name == "ignore_slide":
+    #                                 slides_to_delete.append(i)
+    #                                 break
+    #                         except Exception:
+    #                             continue
+    #                 for idx in reversed(slides_to_delete):
+    #                     pres.Slides(idx).Delete()
+    #                 pres.Save()
+    #                 pres.Close()
+    #                 ppt_app.Quit()
+    #                 pythoncom.CoUninitialize()
+    #             except Exception:
+    #                 continue
+    #         return
+    #     # ...původní chování pro jeden objekt prezentace...
+    #     slides_to_delete = []
+    #     for i in range(1, pres.Slides.Count + 1):
+    #         slide = pres.Slides(i)
+    #         for shape in slide.Shapes:
+    #             try:
+    #                 if hasattr(shape, "Name") and shape.Name == "ignore_slide":
+    #                     slides_to_delete.append(i)
+    #                     break
+    #             except Exception:
+    #                 continue
+    #     for idx in reversed(slides_to_delete):
+    #         pres.Slides(idx).Delete()
 
     def sort_by_price(self):
         None
