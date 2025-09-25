@@ -153,8 +153,11 @@ class App:
         #ttk.Checkbutton(options_frame, text="Seřadit produkty podle ceny", variable=self.var_sort_by_price, command=self.sort_by_price).pack(anchor=tk.W, padx=5, pady=(0, 5))
         ttk.Checkbutton(options_frame, text="Odstranit úvodní stránky", variable=self.var_delete_other_pages, command=self.delete_other_pages).pack(anchor=tk.W, padx=5, pady=(0, 5))
         ttk.Checkbutton(options_frame, text="Ignorovat strukturu formátů", variable=self.var_ignore_structure).pack(anchor=tk.W, padx=5, pady=(0, 5))
-        ttk.Button(options_frame, text="Zvolit cílovou složku", command=self.select_root_folder).pack(anchor=tk.W, padx=5, pady=(5, 2))
+        ttk.Button(options_frame, text="Změnit cílovou složku", command=self.select_root_folder).pack(anchor=tk.W, padx=5, pady=(5, 2))
         self.label_target_folder = ttk.Label(options_frame, text="", foreground="gray")
+        self.label_target_folder.pack(anchor=tk.W, padx=5, pady=(2, 8))
+        # Nastavte text hned při startu
+        self.update_target_folder_label()
 
         # 6) Plánované spuštění
         time_frame = ttk.LabelFrame(frame, text="Plánované spuštění")
@@ -196,8 +199,44 @@ class App:
             self.save_filepath = path
 
     def delete_other_pages(self, pres=None):
+        # Pokud není předán objekt prezentace, pokusí se najít soubory v cílové složce a upravit je
         if pres is None:
+            # Urči složku podle nastavení
+            if self.var_ignore_structure.get():
+                # Všechny PPTX v hlavní export složce nebo root_folder
+                base_dir = self.root_folder if self.root_folder else self.save_filepath
+                pptx_dir = base_dir
+            else:
+                base_dir = self.root_folder if self.root_folder else self.save_filepath
+                pptx_dir = os.path.join(base_dir, "PPTX")
+            if not os.path.isdir(pptx_dir):
+                return
+            pptx_files = [os.path.join(pptx_dir, f) for f in os.listdir(pptx_dir) if f.lower().endswith(".pptx")]
+            for pptx_path in pptx_files:
+                try:
+                    pythoncom.CoInitialize()
+                    ppt_app = win32com.client.Dispatch("PowerPoint.Application")
+                    pres = ppt_app.Presentations.Open(pptx_path, WithWindow=False)
+                    slides_to_delete = []
+                    for i in range(1, pres.Slides.Count + 1):
+                        slide = pres.Slides(i)
+                        for shape in slide.Shapes:
+                            try:
+                                if hasattr(shape, "Name") and shape.Name == "ignore_slide":
+                                    slides_to_delete.append(i)
+                                    break
+                            except Exception:
+                                continue
+                    for idx in reversed(slides_to_delete):
+                        pres.Slides(idx).Delete()
+                    pres.Save()
+                    pres.Close()
+                    ppt_app.Quit()
+                    pythoncom.CoUninitialize()
+                except Exception:
+                    continue
             return
+        # ...původní chování pro jeden objekt prezentace...
         slides_to_delete = []
         for i in range(1, pres.Slides.Count + 1):
             slide = pres.Slides(i)
@@ -221,13 +260,14 @@ class App:
 
     def connect_catalogs(self):
         try:
-            if not self.root_folder and not self.save_filepath:
-                messagebox.showerror("Chyba", "Nejdříve vyberte cílovou složku.")
-                return
-
-            base_dir = self.root_folder if self.root_folder else self.save_filepath
-            pdf_dir  = os.path.join(base_dir, "PDF")
-            pptx_dir = os.path.join(base_dir, "PPTX")
+            # Urči základní složku podle nastavení
+            base_dir = self.save_filepath #self.root_folder if self.root_folder else self.save_filepath
+            if self.var_ignore_structure.get():
+                pdf_dir = base_dir
+                pptx_dir = base_dir
+            else:
+                pdf_dir = os.path.join(base_dir, "PDF")
+                pptx_dir = os.path.join(base_dir, "PPTX")
             os.makedirs(pdf_dir, exist_ok=True)
             os.makedirs(pptx_dir, exist_ok=True)
 
@@ -379,14 +419,45 @@ class App:
         files = [f[:-5] for f in os.listdir("configs") if f.endswith(".json")]
         self.config_cb['values'] = files
 
+    def update_target_folder_label(self):
+        folder = self.root_folder if self.root_folder else self.save_filepath
+        self.label_target_folder.config(text=f"Cílová složka: {folder}")
+
+    # def select_root_folder(self):
+    #     path = filedialog.askdirectory(title="Vyberte cílovou složku")
+    #     if path:
+    #         self.root_folder = path
+    #         self.update_target_folder_label()
+    #         os.makedirs(self.root_folder, exist_ok=True)
+
+    #         # Přesunout obsah z export (self.save_filepath) do nové root složky
+    #         try:
+    #             for item in os.listdir(self.save_filepath):
+    #                 src_path = os.path.join(self.save_filepath, item)
+    #                 dst_path = os.path.join(self.root_folder, item)
+
+    #                 if os.path.exists(dst_path):
+    #                     # Pokud už tam něco stejného existuje, smažeme to
+    #                     if os.path.isdir(dst_path):
+    #                         shutil.rmtree(dst_path)
+    #                     else:
+    #                         os.remove(dst_path)
+
+    #                 shutil.move(src_path, self.root_folder)
+    #         except Exception as e:
+    #             messagebox.showerror("Chyba při přesunu souborů", str(e))
+
+    #         # Obnovit seznam katalogů po přesunu
+    #         self.load_catalog_files()
+
+
     def select_root_folder(self):
         path = filedialog.askdirectory(title="Vyberte cílovou složku")
         if path:
             self.root_folder = path
-            self.label_target_folder.config(text=f"Cílová složka: {self.root_folder}")
+            self.update_target_folder_label()
             os.makedirs(self.root_folder, exist_ok=True)
             self.load_catalog_files()
-
 
     def load_selected_config(self):
         try:
@@ -520,6 +591,8 @@ class App:
         self.export_to_pdf.set(False)
         self.export_to_pptx.set(False)
         self.use_default_excel.set(False)
+        self.var_connect_catalogs.set(False)
+        self.var_delete_other_pages.set(False)
         self.excel_path = None
         self.excel_label.config(text="")
         self.listbox.delete(0, tk.END)
@@ -528,6 +601,7 @@ class App:
         self.minute_cb.set("00")
         self.root.title("Generátor katalogů")
         self.label_target_folder.config(text="")
+        self.update_target_folder_label()
 
     def run_script(self):
         try:
@@ -616,53 +690,94 @@ class App:
             with open(logpath, "w", encoding="utf-8") as lf:
                 lf.write(log_stream.getvalue())
 
-            # --- Přesun souborů do cílové složky ---
-            if self.root_folder and os.path.abspath(self.root_folder) != os.path.abspath(self.save_filepath):
+            # Nejprve spojování katalogů (pokud je zapnuto)
+            if self.var_connect_catalogs.get():
+                self.connect_catalogs()
+
+            # Pokud je zapnuté "Ignorovat strukturu formátů" → zploštění složek PDF/PPTX
+            if self.var_ignore_structure.get():
                 try:
-                    # PDF
+                    # PDF → kořen
                     src_pdf = os.path.join(self.save_filepath, "PDF")
-                    dst_pdf = os.path.join(self.root_folder, "PDF")
                     if os.path.exists(src_pdf):
-                        os.makedirs(dst_pdf, exist_ok=True)
                         for fname in os.listdir(src_pdf):
-                            src_file = os.path.join(src_pdf, fname)
-                            dst_file = os.path.join(dst_pdf, fname)
-                            if os.path.exists(dst_file):
-                                os.remove(dst_file)
-                            shutil.move(src_file, dst_pdf)
+                            shutil.move(os.path.join(src_pdf, fname), self.save_filepath)
                         try:
                             os.rmdir(src_pdf)
                         except OSError:
                             pass
-                    # PPTX
+
+                    # PPTX → kořen
                     src_pptx = os.path.join(self.save_filepath, "PPTX")
-                    dst_pptx = os.path.join(self.root_folder, "PPTX")
                     if os.path.exists(src_pptx):
-                        os.makedirs(dst_pptx, exist_ok=True)
                         for fname in os.listdir(src_pptx):
-                            src_file = os.path.join(src_pptx, fname)
-                            dst_file = os.path.join(dst_pptx, fname)
-                            if os.path.exists(dst_file):
-                                os.remove(dst_file)
-                            shutil.move(src_file, dst_pptx)
+                            shutil.move(os.path.join(src_pptx, fname), self.save_filepath)
                         try:
                             os.rmdir(src_pptx)
                         except OSError:
                             pass
-                    # chyby.txt
-                    src_err = os.path.join(self.save_filepath, "chyby.txt")
-                    dst_err = os.path.join(self.root_folder, "chyby.txt")
-                    if os.path.exists(src_err):
-                        if os.path.exists(dst_err):
-                            os.remove(dst_err)
-                        shutil.move(src_err, dst_err)
                 except Exception as e:
-                    messagebox.showerror("Chyba při přesunu souborů", str(e))
+                    messagebox.showerror("Chyba při zploštění struktury", str(e))
+
+            # Přesun do uživatelem zvolené cílové složky
+            if self.root_folder and os.path.abspath(self.root_folder) != os.path.abspath(self.save_filepath):
+                for item in os.listdir(self.save_filepath):
+                    src_path = os.path.join(self.save_filepath, item)
+                    dst_path = os.path.join(self.root_folder, item)
+
+                    if os.path.exists(dst_path):
+                        # Pokud už tam něco stejného existuje, smažeme to
+                        if os.path.isdir(dst_path):
+                            shutil.rmtree(dst_path)
+                        else:
+                            os.remove(dst_path)
+
+                    shutil.move(src_path, self.root_folder)
+
+                # try:
+                #     # PDF
+                #     src_pdf = os.path.join(self.save_filepath, "PDF")
+                #     dst_pdf = os.path.join(self.root_folder, "PDF")
+                #     if os.path.exists(src_pdf):
+                #         os.makedirs(dst_pdf, exist_ok=True)
+                #         for fname in os.listdir(src_pdf):
+                #             src_file = os.path.join(src_pdf, fname)
+                #             dst_file = os.path.join(dst_pdf, fname)
+                #             if os.path.exists(dst_file):
+                #                 os.remove(dst_file)
+                #             shutil.move(src_file, dst_pdf)
+                #         try:
+                #             os.rmdir(src_pdf)
+                #         except OSError:
+                #             pass
+
+                #     # PPTX
+                #     src_pptx = os.path.join(self.save_filepath, "PPTX")
+                #     dst_pptx = os.path.join(self.root_folder, "PPTX")
+                #     if os.path.exists(src_pptx):
+                #         os.makedirs(dst_pptx, exist_ok=True)
+                #         for fname in os.listdir(src_pptx):
+                #             src_file = os.path.join(src_pptx, fname)
+                #             dst_file = os.path.join(dst_pptx, fname)
+                #             if os.path.exists(dst_file):
+                #                 os.remove(dst_file)
+                #             shutil.move(src_file, dst_pptx)
+                #         try:
+                #             os.rmdir(src_pptx)
+                #         except OSError:
+                #             pass
+
+                #     # chyby.txt
+                #     src_err = os.path.join(self.save_filepath, "chyby.txt")
+                #     dst_err = os.path.join(self.root_folder, "chyby.txt")
+                #     if os.path.exists(src_err):
+                #         if os.path.exists(dst_err):
+                #             os.remove(dst_err)
+                #         shutil.move(src_err, dst_err)
+                # except Exception as e:
+                #     messagebox.showerror("Chyba při přesunu souborů", str(e))
 
             messagebox.showinfo("Hotovo", "Generování dokončeno pro všechny režimy.")
-            if self.var_connect_catalogs.get():
-                self.connect_catalogs()
-
             self.reset_ui()
         except Exception as e:
             messagebox.showerror("Chyba", str(e))
