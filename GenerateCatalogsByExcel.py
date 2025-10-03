@@ -436,7 +436,6 @@ def cycle_slides_printMode(presentation):
     for i, slide in enumerate(presentation.Slides, start=1):
         # Pokud slide obsahuje ignore_slide, přidej k odstranění
         if shape_of_name_exists(slide, "ignore_slide"):
-            slides_to_remove.append(i)
             continue
 
         prefix_check, _ = check_slide_for_prefix_and_fill_price(slide)
@@ -475,7 +474,6 @@ def cycle_slides(presentation):
     for i, slide in enumerate(presentation.Slides, start=1):
         # Pokud slide obsahuje ignore_slide, přidej k odstranění
         if shape_of_name_exists(slide, "ignore_slide"):
-            slides_to_remove.append(i)
             continue
 
         prefix_check, _ = check_slide_for_prefix_and_fill_price(slide)

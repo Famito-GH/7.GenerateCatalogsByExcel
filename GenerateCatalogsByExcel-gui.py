@@ -180,6 +180,8 @@ class App:
         progress_frame.pack(fill=tk.X, pady=(0, 10), padx=5)
         self.progress = ttk.Progressbar(progress_frame, orient="horizontal", mode="determinate")
         self.progress.pack(fill=tk.X, side=tk.LEFT, expand=True)
+        self.progress_label = ttk.Label(progress_frame, text="0 / 0")
+        self.progress_label.pack(side=tk.LEFT, padx=(10,0))
 
         config_frame = ttk.Frame(frame)
         config_frame.pack(padx=5, pady=10, fill=tk.X)
@@ -198,7 +200,16 @@ class App:
         if path:
             self.save_filepath = path
 
+    def sort_by_price(self):
+        None
+
+    def _detect_mode_from_name(self, filename: str):
+        import re
+        m = re.search(r"UPRAVENO\s*-\s*(BEZ CEN|CZK|EUR)", filename, re.IGNORECASE)
+        return m.group(1).upper() if m else None
+
     def delete_other_pages(self, pres=None):
+        # Pokud není předán objekt prezentace, pokusí se najít soubory v cílové složce a upravit je
         if pres is None:
             return  # když není předaná prezentace, nic se nedělá
 
@@ -218,68 +229,6 @@ class App:
                 pres.Slides(idx).Delete()
             except Exception:
                 continue
-
-
-
-    # def delete_other_pages(self, pres=None):
-    #     # Pokud není předán objekt prezentace, pokusí se najít soubory v cílové složce a upravit je
-    #     if pres is None:
-    #         # Urči složku podle nastavení
-    #         if self.var_ignore_structure.get():
-    #             # Všechny PPTX v hlavní export složce nebo root_folder
-    #             base_dir = self.root_folder if self.root_folder else self.save_filepath
-    #             pptx_dir = base_dir
-    #         else:
-    #             base_dir = self.root_folder if self.root_folder else self.save_filepath
-    #             pptx_dir = os.path.join(base_dir, "PPTX")
-    #         if not os.path.isdir(pptx_dir):
-    #             return
-    #         pptx_files = [os.path.join(pptx_dir, f) for f in os.listdir(pptx_dir) if f.lower().endswith(".pptx")]
-    #         for pptx_path in pptx_files:
-    #             try:
-    #                 pythoncom.CoInitialize()
-    #                 ppt_app = win32com.client.Dispatch("PowerPoint.Application")
-    #                 pres = ppt_app.Presentations.Open(pptx_path, WithWindow=False)
-    #                 slides_to_delete = []
-    #                 for i in range(1, pres.Slides.Count + 1):
-    #                     slide = pres.Slides(i)
-    #                     for shape in slide.Shapes:
-    #                         try:
-    #                             if hasattr(shape, "Name") and shape.Name == "ignore_slide":
-    #                                 slides_to_delete.append(i)
-    #                                 break
-    #                         except Exception:
-    #                             continue
-    #                 for idx in reversed(slides_to_delete):
-    #                     pres.Slides(idx).Delete()
-    #                 pres.Save()
-    #                 pres.Close()
-    #                 ppt_app.Quit()
-    #                 pythoncom.CoUninitialize()
-    #             except Exception:
-    #                 continue
-    #         return
-    #     # ...původní chování pro jeden objekt prezentace...
-    #     slides_to_delete = []
-    #     for i in range(1, pres.Slides.Count + 1):
-    #         slide = pres.Slides(i)
-    #         for shape in slide.Shapes:
-    #             try:
-    #                 if hasattr(shape, "Name") and shape.Name == "ignore_slide":
-    #                     slides_to_delete.append(i)
-    #                     break
-    #             except Exception:
-    #                 continue
-    #     for idx in reversed(slides_to_delete):
-    #         pres.Slides(idx).Delete()
-
-    def sort_by_price(self):
-        None
-
-    def _detect_mode_from_name(self, filename: str):
-        import re
-        m = re.search(r"UPRAVENO\s*-\s*(BEZ CEN|CZK|EUR)", filename, re.IGNORECASE)
-        return m.group(1).upper() if m else None
 
     def connect_catalogs(self):
         try:
@@ -445,34 +394,6 @@ class App:
     def update_target_folder_label(self):
         folder = self.root_folder if self.root_folder else self.save_filepath
         self.label_target_folder.config(text=f"Cílová složka: {folder}")
-
-    # def select_root_folder(self):
-    #     path = filedialog.askdirectory(title="Vyberte cílovou složku")
-    #     if path:
-    #         self.root_folder = path
-    #         self.update_target_folder_label()
-    #         os.makedirs(self.root_folder, exist_ok=True)
-
-    #         # Přesunout obsah z export (self.save_filepath) do nové root složky
-    #         try:
-    #             for item in os.listdir(self.save_filepath):
-    #                 src_path = os.path.join(self.save_filepath, item)
-    #                 dst_path = os.path.join(self.root_folder, item)
-
-    #                 if os.path.exists(dst_path):
-    #                     # Pokud už tam něco stejného existuje, smažeme to
-    #                     if os.path.isdir(dst_path):
-    #                         shutil.rmtree(dst_path)
-    #                     else:
-    #                         os.remove(dst_path)
-
-    #                 shutil.move(src_path, self.root_folder)
-    #         except Exception as e:
-    #             messagebox.showerror("Chyba při přesunu souborů", str(e))
-
-    #         # Obnovit seznam katalogů po přesunu
-    #         self.load_catalog_files()
-
 
     def select_root_folder(self):
         path = filedialog.askdirectory(title="Vyberte cílovou složku")
@@ -680,7 +601,10 @@ class App:
                 os.makedirs(os.path.join(export_base_dir, "PDF"), exist_ok=True)
                 os.makedirs(os.path.join(export_base_dir, "PPTX"), exist_ok=True)
 
-            total_count = len(modes_to_generate) * len(ppt_files)
+
+            pocet_cen = sum([self.var_czk.get(), self.var_eur.get(), self.var_bezcen.get()])
+            pocet_formatu = sum([self.export_to_pdf.get(), self.export_to_pptx.get()])
+            total_count = pocet_formatu * len(ppt_files) * pocet_cen
             self.progress["maximum"] = total_count
             current_run = 0
 
@@ -702,10 +626,13 @@ class App:
                 for filename in ppt_files:
                     current_run += 1
                     self.progress["value"] = current_run
+                    self.progress_label.config(text=f"{current_run} / {total_count}")
+                    self.root.update_idletasks()  # zajišťuje okamžitou aktualizaci UI
 
                     print(f"\n[{current_run}/{total_count}] Zpracovávám: {filename} (režim {mode_label})")
                     fpath = os.path.join(self.directory, filename)
                     self.make_catalog_gui(fpath, filename, export_base_dir)
+
 
             log_dir = export_base_dir
             os.makedirs(log_dir, exist_ok=True)
@@ -756,50 +683,6 @@ class App:
                             os.remove(dst_path)
 
                     shutil.move(src_path, self.root_folder)
-
-                # try:
-                #     # PDF
-                #     src_pdf = os.path.join(self.save_filepath, "PDF")
-                #     dst_pdf = os.path.join(self.root_folder, "PDF")
-                #     if os.path.exists(src_pdf):
-                #         os.makedirs(dst_pdf, exist_ok=True)
-                #         for fname in os.listdir(src_pdf):
-                #             src_file = os.path.join(src_pdf, fname)
-                #             dst_file = os.path.join(dst_pdf, fname)
-                #             if os.path.exists(dst_file):
-                #                 os.remove(dst_file)
-                #             shutil.move(src_file, dst_pdf)
-                #         try:
-                #             os.rmdir(src_pdf)
-                #         except OSError:
-                #             pass
-
-                #     # PPTX
-                #     src_pptx = os.path.join(self.save_filepath, "PPTX")
-                #     dst_pptx = os.path.join(self.root_folder, "PPTX")
-                #     if os.path.exists(src_pptx):
-                #         os.makedirs(dst_pptx, exist_ok=True)
-                #         for fname in os.listdir(src_pptx):
-                #             src_file = os.path.join(src_pptx, fname)
-                #             dst_file = os.path.join(dst_pptx, fname)
-                #             if os.path.exists(dst_file):
-                #                 os.remove(dst_file)
-                #             shutil.move(src_file, dst_pptx)
-                #         try:
-                #             os.rmdir(src_pptx)
-                #         except OSError:
-                #             pass
-
-                #     # chyby.txt
-                #     src_err = os.path.join(self.save_filepath, "chyby.txt")
-                #     dst_err = os.path.join(self.root_folder, "chyby.txt")
-                #     if os.path.exists(src_err):
-                #         if os.path.exists(dst_err):
-                #             os.remove(dst_err)
-                #         shutil.move(src_err, dst_err)
-                # except Exception as e:
-                #     messagebox.showerror("Chyba při přesunu souborů", str(e))
-
             messagebox.showinfo("Hotovo", "Generování dokončeno pro všechny režimy.")
             self.reset_ui()
         except Exception as e:
@@ -810,20 +693,20 @@ class App:
 
     # Změna signatury make_catalog_gui, přidání parametru export_base_dir
     def make_catalog_gui(self, powerpoint_filepath, file_name, export_base_dir):
-        # Nastavte cílovou složku pro export
         output_dir = export_base_dir
         if not self.var_ignore_structure.get():
             output_dir = export_base_dir
         os.makedirs(output_dir, exist_ok=True)
 
         error_file = os.path.join(output_dir, "chyby.txt")
-
         with open(error_file, "w", encoding="utf-8"):
             pass
+
         try:
             pythoncom.CoInitialize()
             ppt_app = win32com.client.Dispatch("PowerPoint.Application")
             pres = ppt_app.Presentations.Open(powerpoint_filepath)
+
             first = pres.Slides[0]
             valid = cycle_slides_printMode(pres) if shape_of_name_exists(first, "main") else cycle_slides(pres)
             if valid:
@@ -834,7 +717,11 @@ class App:
                 base = file_name[:-5]
                 name = f"{base} - UPRAVENO - {label}{tag} - {dated}"
 
-                # Ukládejte do správné složky
+                # 🗑 Mazání stránek jen pokud je zapnuto
+                if self.var_delete_other_pages.get():
+                    self.delete_other_pages(pres)
+
+                # 💾 Uložení výsledků
                 if GenerateCatalogsByExcel.export_to_pdf:
                     if self.var_ignore_structure.get():
                         pres.SaveAs(os.path.join(output_dir, name + ".pdf"), 32)
@@ -857,16 +744,12 @@ class App:
                         except pywintypes.com_error:
                             pres.SaveCopyAs(os.path.join(pptx_dir, name + ".pptx"))
 
-            if self.var_delete_other_pages.get():
-                self.delete_other_pages(pres)
             print(f"💾 Ukládám do složky: {output_dir}")
             pres.Close()
             ppt_app.Quit()
+        finally:
             pythoncom.CoUninitialize()
-        except Exception as e:
-            with open(error_file, "a", encoding="utf-8") as log_file:
-                log_file.write(f"Neočekávaná chyba: {e}")
-            print(f"Neočekávaná chyba: {e}")
+
 
 if __name__ == "__main__":
     root = tk.Tk()
