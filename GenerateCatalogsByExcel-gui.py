@@ -44,7 +44,7 @@ class App:
         self.root = root
         self.root.title("Generátor katalogů")
         self.root.geometry("600x900")
-        self.root.resizable(False, True)
+        self.root.resizable(True, True)
 
         self.root_folder = None
         self.directory = None
@@ -624,6 +624,8 @@ class App:
                 print(f"\n====== Režim: {mode_label} ======")
 
                 for filename in ppt_files:
+                    if GenerateCatalogsByExcel.export_to_pdf and GenerateCatalogsByExcel.export_to_pptx:
+                        current_run += 1
                     current_run += 1
                     self.progress["value"] = current_run
                     self.progress_label.config(text=f"{current_run} / {total_count}")
