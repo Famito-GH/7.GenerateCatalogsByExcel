@@ -1,3 +1,5 @@
+# --- VERZE 2.4 ---
+
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import threading
@@ -39,9 +41,12 @@ if getattr(sys, 'frozen', False):
 else:
     application_path = os.path.dirname(__file__)
 
+icon_path = os.path.join(application_path, 'catalog.ico')
+
 class App:
     def __init__(self, root):
         self.root = root
+        self.root.iconbitmap(SOUBORY + r"\catalog.ico")
         self.root.title("Generátor katalogů")
         self.root.geometry("600x900")
         self.root.resizable(True, True)
@@ -707,7 +712,7 @@ class App:
         try:
             pythoncom.CoInitialize()
             ppt_app = win32com.client.Dispatch("PowerPoint.Application")
-            pres = ppt_app.Presentations.Open(powerpoint_filepath)
+            pres = ppt_app.Presentations.Open(powerpoint_filepath, WithWindow=False)
 
             first = pres.Slides[0]
             valid = cycle_slides_printMode(pres) if shape_of_name_exists(first, "main") else cycle_slides(pres)
@@ -723,7 +728,7 @@ class App:
                 if self.var_delete_other_pages.get():
                     self.delete_other_pages(pres)
 
-                # 💾 Uložení výsledků
+                # Uložení výsledků
                 if GenerateCatalogsByExcel.export_to_pdf:
                     if self.var_ignore_structure.get():
                         pres.SaveAs(os.path.join(output_dir, name + ".pdf"), 32)
@@ -746,12 +751,16 @@ class App:
                         except pywintypes.com_error:
                             pres.SaveCopyAs(os.path.join(pptx_dir, name + ".pptx"))
 
-            print(f"💾 Ukládám do složky: {output_dir}")
-            pres.Close()
+            print(f"Ukládám do složky: {output_dir}")
+            try:
+                import time
+                time.sleep(0.3)
+                pres.Close()
+            except Exception as e:
+                print(f"⚠️ Chyba při zavírání prezentace: {e}")
             ppt_app.Quit()
         finally:
             pythoncom.CoUninitialize()
-
 
 if __name__ == "__main__":
     root = tk.Tk()
